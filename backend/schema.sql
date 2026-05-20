@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS pixels (
+    id INTEGER PRIMARY KEY,
+    color TEXT NOT NULL,
+    link TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
