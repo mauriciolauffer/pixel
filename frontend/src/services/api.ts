@@ -1,12 +1,8 @@
+import { type Pixel } from '@pixel/shared';
+
 // In production, the API is served from the same origin as the frontend.
 // In development, Vite will proxy or we can use an environment variable.
 const API_URL = import.meta.env.VITE_API_URL || '';
-
-export interface Pixel {
-  id: number;
-  color: string;
-  link: string;
-}
 
 export const fetchPixels = async (): Promise<Pixel[]> => {
   const response = await fetch(`${API_URL}/pixels`);

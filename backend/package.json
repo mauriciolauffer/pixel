@@ -12,8 +12,11 @@
   "license": "ISC",
   "packageManager": "pnpm@10.30.3",
   "dependencies": {
+    "@hono/zod-validator": "^0.8.0",
+    "@pixel/shared": "workspace:*",
     "hono": "^4.12.21",
-    "wrangler": "^4.93.0"
+    "wrangler": "^4.93.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "vitest": "^4.1.6"

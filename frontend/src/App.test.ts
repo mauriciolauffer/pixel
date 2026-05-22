@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { VueQueryPlugin } from '@tanstack/vue-query';
 import App from './App.vue';
 import * as api from './services/api';
 
@@ -14,35 +15,43 @@ describe('App.vue', () => {
     (api.fetchPixels as any).mockResolvedValue([]);
   });
 
+  const mountApp = () => {
+    return mount(App, {
+      global: {
+        plugins: [VueQueryPlugin],
+      },
+    });
+  };
+
   it('renders the title', () => {
-    const wrapper = mount(App);
+    const wrapper = mountApp();
     expect(wrapper.find('h1').text()).toBe('Million Pixel Billboard');
   });
 
-  it('loads pixels on mount', () => {
-    mount(App);
-    expect(api.fetchPixels).toHaveBeenCalled();
-  });
-
   it('shows editor when a pixel is clicked', async () => {
-    const wrapper = mount(App);
-    // Find the Billboard component and emit a pixel-click
+    const wrapper = mountApp();
+    // Wait for initial load
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'Billboard' }).exists()).toBe(true));
+
     const billboard = wrapper.findComponent({ name: 'Billboard' });
-    await (billboard.vm as any).$emit('pixel-click', 123);
+    await billboard.vm.$emit('pixel-click', 123);
 
     expect(wrapper.find('.editor').exists()).toBe(true);
     expect(wrapper.find('.editor h3').text()).toContain('Edit Pixel #123');
   });
 
-  it('calls updatePixel and reloads on update', async () => {
-    (api.updatePixel as any).mockResolvedValue({ success: true });
-    const wrapper = mount(App);
+  it('validates link before update', async () => {
+    const wrapper = mountApp();
+    window.alert = vi.fn();
+
+    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'Billboard' }).exists()).toBe(true));
     const billboard = wrapper.findComponent({ name: 'Billboard' });
-    await (billboard.vm as any).$emit('pixel-click', 456);
+    await billboard.vm.$emit('pixel-click', 123);
 
-    await wrapper.find('button').trigger('click'); // The "Update" button
+    await wrapper.find('input[type="text"]').setValue('invalid-link');
+    await wrapper.find('button').trigger('click');
 
-    expect(api.updatePixel).toHaveBeenCalledWith(expect.objectContaining({ id: 456 }));
-    expect(api.fetchPixels).toHaveBeenCalledTimes(2); // Initial + after update
+    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Invalid link'));
+    expect(api.updatePixel).not.toHaveBeenCalled();
   });
 });

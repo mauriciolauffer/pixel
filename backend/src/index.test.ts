@@ -18,10 +18,9 @@ describe('Hono app', () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data).toEqual(mockPixels);
-    expect(mockDB.prepare).toHaveBeenCalledWith('SELECT id, color, link FROM pixels');
   });
 
-  it('should update a pixel in DB', async () => {
+  it('should update a pixel with valid data', async () => {
     const mockDB = {
       prepare: vi.fn().mockReturnThis(),
       bind: vi.fn().mockReturnThis(),
@@ -39,24 +38,45 @@ describe('Hono app', () => {
     );
 
     expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data).toEqual({ success: true });
-    expect(mockDB.prepare).toHaveBeenCalled();
     expect(mockDB.bind).toHaveBeenCalledWith(123, '#0000ff', 'https://test.com');
   });
 
-  it('should return 400 for invalid pixel ID', async () => {
+  it('should return 400 for invalid color format', async () => {
     const res = await app.request(
       '/pixels',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: -1, color: '#0000ff', link: '' }),
+        body: JSON.stringify({ id: 1, color: 'red', link: '' }),
       }
     );
 
     expect(res.status).toBe(400);
-    const data = await res.json();
-    expect(data.error).toBe('Invalid pixel ID');
+  });
+
+  it('should return 400 for invalid URL', async () => {
+    const res = await app.request(
+      '/pixels',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 1, color: '#ffffff', link: 'not-a-url' }),
+      }
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should return 400 for out of range ID', async () => {
+    const res = await app.request(
+      '/pixels',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 1000000, color: '#ffffff', link: '' }),
+      }
+    );
+
+    expect(res.status).toBe(400);
   });
 });

@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
+import { z } from 'zod';
+import { zValidator } from '@hono/zod-validator';
+import { BILLBOARD_WIDTH, BILLBOARD_HEIGHT } from '@pixel/shared';
 
 type Bindings = {
   DB: D1Database;
@@ -8,7 +12,14 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+app.use('*', secureHeaders());
 app.use('*', cors());
+
+const pixelSchema = z.object({
+  id: z.number().int().min(0).max(BILLBOARD_WIDTH * BILLBOARD_HEIGHT - 1),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Invalid color format'),
+  link: z.string().max(255).and(z.string().url().or(z.string().length(0))),
+});
 
 app.get('/pixels', async (c) => {
   try {
@@ -19,12 +30,9 @@ app.get('/pixels', async (c) => {
   }
 });
 
-app.post('/pixels', async (c) => {
+app.post('/pixels', zValidator('json', pixelSchema), async (c) => {
   try {
-    const { id, color, link } = await c.req.json();
-    if (id < 0 || id >= 1000000) {
-      return c.json({ error: 'Invalid pixel ID' }, 400);
-    }
+    const { id, color, link } = c.req.valid('json');
     await c.env.DB.prepare(
       'INSERT INTO pixels (id, color, link) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET color = EXCLUDED.color, link = EXCLUDED.link, updated_at = CURRENT_TIMESTAMP'
     )
