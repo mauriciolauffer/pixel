@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
 import Billboard from './components/Billboard.vue';
+import Auth from './components/Auth.vue';
 import { fetchPixels, updatePixel } from './services/api';
+import { authClient } from './services/auth-client';
 
 const queryClient = useQueryClient();
+// @ts-ignore - Better Auth Vue types can be tricky
+const session = authClient.useSession();
+const user = computed(() => session.value?.data?.user);
 
 const { data: pixels, isLoading } = useQuery({
   queryKey: ['pixels'],
@@ -37,6 +42,10 @@ const sanitizeLink = (url: string) => {
 };
 
 const handlePixelClick = (id: number) => {
+  if (!user.value) {
+    alert('Please login to edit pixels.');
+    return;
+  }
   selectedPixelId.value = id;
   const existing = pixels.value?.find(p => p.id === id);
   if (existing) {
@@ -64,11 +73,26 @@ const handleUpdate = async () => {
   });
   selectedPixelId.value = null;
 };
+
+const handleLogout = async () => {
+  await authClient.signOut();
+};
 </script>
 
 <template>
   <div class="app">
-    <h1>Million Pixel Billboard</h1>
+    <header>
+      <h1>Million Pixel Billboard</h1>
+      <div v-if="user" class="user-info">
+        Logged in as {{ user.name }}
+        <button @click="handleLogout" class="logout-btn">Logout</button>
+      </div>
+    </header>
+
+    <div v-if="!user" class="auth-section">
+      <Auth />
+    </div>
+
     <div v-if="isLoading">Loading pixels...</div>
     <div v-else>
       <div v-if="selectedPixelId !== null" class="editor">
@@ -98,6 +122,22 @@ const handleUpdate = async () => {
   text-align: center;
   padding: 20px;
   font-family: sans-serif;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.user-info {
+  font-size: 14px;
+}
+.logout-btn {
+  margin-left: 10px;
+  padding: 4px 8px;
+}
+.auth-section {
+  margin-bottom: 40px;
 }
 .editor {
   margin-bottom: 20px;

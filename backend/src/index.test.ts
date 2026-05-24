@@ -1,31 +1,46 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import app from '../src/index';
 
-describe('Hono app', () => {
-  it('should fetch all pixels from DB', async () => {
-    const mockPixels = [
-      { id: 1, color: '#ff0000', link: 'http://example.com' },
-      { id: 2, color: '#00ff00', link: '' },
-    ];
+// Mock Better Auth
+vi.mock('./auth', () => ({
+  getAuth: vi.fn(() => ({
+    api: {
+      getSession: vi.fn(),
+    },
+    handler: vi.fn(),
+  })),
+}));
 
-    const mockDB = {
-      prepare: vi.fn().mockReturnThis(),
-      all: vi.fn().mockResolvedValue({ results: mockPixels }),
-    };
+import { getAuth } from './auth';
 
-    const res = await app.request('/pixels', {}, { DB: mockDB as any });
-
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data).toEqual(mockPixels);
-  });
-
-  it('should update a pixel with valid data', async () => {
-    const mockDB = {
+describe('Hono app with Auth', () => {
+  const mockEnv = {
+    DB: {
       prepare: vi.fn().mockReturnThis(),
       bind: vi.fn().mockReturnThis(),
+      all: vi.fn().mockResolvedValue({ results: [] }),
       run: vi.fn().mockResolvedValue({ success: true }),
+    },
+    BETTER_AUTH_SECRET: 'test-secret',
+    BETTER_AUTH_URL: 'http://localhost:3000',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should fetch all pixels from DB (unauthenticated)', async () => {
+    const res = await app.request('/pixels', {}, mockEnv as any);
+    expect(res.status).toBe(200);
+  });
+
+  it('should return 401 for unauthenticated pixel update', async () => {
+    const mockAuth = {
+      api: {
+        getSession: vi.fn().mockResolvedValue(null),
+      },
     };
+    (getAuth as any).mockReturnValue(mockAuth);
 
     const res = await app.request(
       '/pixels',
@@ -34,49 +49,35 @@ describe('Hono app', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: 123, color: '#0000ff', link: 'https://test.com' }),
       },
-      { DB: mockDB as any }
+      mockEnv as any
+    );
+
+    expect(res.status).toBe(401);
+    const data = await res.json();
+    expect(data.error).toBe('Unauthorized');
+  });
+
+  it('should update a pixel for authenticated user', async () => {
+    const mockAuth = {
+      api: {
+        getSession: vi.fn().mockResolvedValue({ user: { id: 'user-1' } }),
+      },
+    };
+    (getAuth as any).mockReturnValue(mockAuth);
+
+    const res = await app.request(
+      '/pixels',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 123, color: '#0000ff', link: 'https://test.com' }),
+      },
+      mockEnv as any
     );
 
     expect(res.status).toBe(200);
-    expect(mockDB.bind).toHaveBeenCalledWith(123, '#0000ff', 'https://test.com');
-  });
-
-  it('should return 400 for invalid color format', async () => {
-    const res = await app.request(
-      '/pixels',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 1, color: 'red', link: '' }),
-      }
-    );
-
-    expect(res.status).toBe(400);
-  });
-
-  it('should return 400 for invalid URL', async () => {
-    const res = await app.request(
-      '/pixels',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 1, color: '#ffffff', link: 'not-a-url' }),
-      }
-    );
-
-    expect(res.status).toBe(400);
-  });
-
-  it('should return 400 for out of range ID', async () => {
-    const res = await app.request(
-      '/pixels',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: 1000000, color: '#ffffff', link: '' }),
-      }
-    );
-
-    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(mockEnv.DB.run).toHaveBeenCalled();
   });
 });

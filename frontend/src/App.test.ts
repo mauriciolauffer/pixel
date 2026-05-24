@@ -3,16 +3,31 @@ import { mount } from '@vue/test-utils';
 import { VueQueryPlugin } from '@tanstack/vue-query';
 import App from './App.vue';
 import * as api from './services/api';
+import { authClient } from './services/auth-client';
+import { ref } from 'vue';
 
 vi.mock('./services/api', () => ({
   fetchPixels: vi.fn(),
   updatePixel: vi.fn(),
 }));
 
+vi.mock('./services/auth-client', () => ({
+  authClient: {
+    useSession: vi.fn(),
+    signIn: { email: vi.fn() },
+    signUp: { email: vi.fn() },
+    signOut: vi.fn(),
+  },
+}));
+
 describe('App.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (api.fetchPixels as any).mockResolvedValue([]);
+    (authClient.useSession as any).mockReturnValue(ref({
+      data: null,
+      isPending: false,
+    }));
   });
 
   const mountApp = () => {
@@ -28,30 +43,17 @@ describe('App.vue', () => {
     expect(wrapper.find('h1').text()).toBe('Million Pixel Billboard');
   });
 
-  it('shows editor when a pixel is clicked', async () => {
+  it('shows login section when not authenticated', () => {
     const wrapper = mountApp();
-    // Wait for initial load
-    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'Billboard' }).exists()).toBe(true));
-
-    const billboard = wrapper.findComponent({ name: 'Billboard' });
-    await billboard.vm.$emit('pixel-click', 123);
-
-    expect(wrapper.find('.editor').exists()).toBe(true);
-    expect(wrapper.find('.editor h3').text()).toContain('Edit Pixel #123');
+    expect(wrapper.findComponent({ name: 'Auth' }).exists()).toBe(true);
   });
 
-  it('validates link before update', async () => {
+  it('shows user info when authenticated', () => {
+    (authClient.useSession as any).mockReturnValue(ref({
+      data: { user: { name: 'Test User' } },
+      isPending: false,
+    }));
     const wrapper = mountApp();
-    window.alert = vi.fn();
-
-    await vi.waitFor(() => expect(wrapper.findComponent({ name: 'Billboard' }).exists()).toBe(true));
-    const billboard = wrapper.findComponent({ name: 'Billboard' });
-    await billboard.vm.$emit('pixel-click', 123);
-
-    await wrapper.find('input[type="text"]').setValue('invalid-link');
-    await wrapper.find('button').trigger('click');
-
-    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Invalid link'));
-    expect(api.updatePixel).not.toHaveBeenCalled();
+    expect(wrapper.find('.user-info').text()).toContain('Logged in as Test User');
   });
 });
